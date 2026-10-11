@@ -28,7 +28,7 @@
 </div></section>
 <section class="card"><h2>Risk</h2><div class="inputs">
 <label>Modal USD<input id="bal" type="number" value="1000"></label>
-<label>Risk %<input id="risk" type="number" value="1" step=".1" min=".1" max="5"></label>
+<label>Risk %<input id="risk" type="number" value="0.5" step="0.1" min="0.1" max="5"></label>
 <label>Max Spread<input id="spr" type="number" value="1.50" step=".1"></label>
 </div><div style="padding:10px 0">Estimasi lot: <b id="lot">—</b></div><small>Estimasi saja. Cek spread, contract size dan tick value di MT5 Finex.</small></section>
 <section class="actions"><button id="ref">↻ Refresh</button><button id="mt5">Buka MT5 Finex</button><button id="paper">＋ Paper Trade</button></section>
@@ -36,25 +36,54 @@
 <section class="card"><h2>Status</h2><p id="status">Mengambil data real-time.</p></section>
 </main>
 <script>
-const $=id=>document.getElementById(id);let C=[],last="WAIT",prev=null,audio=null;
-async function get(u){let r=await fetch(u,{cache:"no-store"});if(!r.ok)throw Error("HTTP "+r.status);return r.json()}
+const $=id=>document.getElementById(id);
+let C=[],H1=[],last="WAIT",prev=null,audio=null,spotFresh=false,barsFresh=false;
+async function get(u){const r=await fetch(u,{cache:"no-store"});if(!r.ok)throw Error("HTTP "+r.status);return r.json()}
 function ema(a,n){if(a.length<n)return null;let k=2/(n+1),e=a.slice(0,n).reduce((x,y)=>x+y,0)/n;for(let i=n;i<a.length;i++)e=a[i]*k+e*(1-k);return e}
 function rsi(a,n=14){if(a.length<n+1)return null;let g=0,l=0;for(let i=1;i<=n;i++){let d=a[i]-a[i-1];g+=Math.max(d,0);l+=Math.max(-d,0)}g/=n;l/=n;for(let i=n+1;i<a.length;i++){let d=a[i]-a[i-1];g=(g*(n-1)+Math.max(d,0))/n;l=(l*(n-1)+Math.max(-d,0))/n}return l?100-100/(1+g/l):100}
 function atr(c,n=14){if(c.length<n+1)return null;let t=[];for(let i=1;i<c.length;i++){let x=c[i],p=c[i-1];t.push(Math.max(x.h-x.l,Math.abs(x.h-p.c),Math.abs(x.l-p.c)))}return t.slice(-n).reduce((a,b)=>a+b,0)/n}
-function adx(c){let a=atr(c);if(!a)return null;let m=[];for(let i=1;i<c.length;i++)m.push(Math.abs(c[i].c-c[i-1].c));return Math.min(60,Math.max(0,(m.slice(-14).reduce((x,y)=>x+y,0)/14)/a*25))}
-function agg(p,mins){let m=new Map(),d=mins*60000;for(let q of p){let rawT=typeof q.t==="number"?q.t:Number(q.t),ms=rawT<1e12?rawT*1000:rawT;let t=Math.floor(ms/d)*d,v=+q.p;if(!Number.isFinite(v))continue;if(!m.has(t))m.set(t,{t,o:v,h:v,l:v,c:v});else{let z=m.get(t);z.h=Math.max(z.h,v);z.l=Math.min(z.l,v);z.c=v}}return [...m.values()].sort((a,b)=>a.t-b.t)}
-function f(v){return v==null?"—":(+v).toFixed(2)}
+function adx(c){let a=atr(c);if(!a||c.length<15)return null;let m=[];for(let i=1;i<c.length;i++)m.push(Math.abs(c[i].c-c[i-1].c));return Math.min(60,Math.max(0,(m.slice(-14).reduce((x,y)=>x+y,0)/14)/a*25))}
+function normalizeBars(points){return (Array.isArray(points)?points:[]).map(z=>{let rawT=Number(z.t??z.time??z.timestamp),t=rawT<1e12?rawT*1000:rawT;let c=Number(z.c??z.close),o=Number(z.o??z.open??c),h=Number(z.h??z.high??Math.max(o,c)),l=Number(z.l??z.low??Math.min(o,c));if(!Number.isFinite(t)||![o,h,l,c].every(Number.isFinite))return null;return {t,o,h,l,c}}).filter(Boolean).sort((a,b)=>a.t-b.t)}
+function f(v){return v==null||!Number.isFinite(+v)?"—":(+v).toFixed(2)}
 function st(s){$("state").textContent=s;$("state").className="pill "+(s==="LIVE"?"live":s==="STALE"?"stale":"off")}
-function draw(){let cv=$("cv"),x=cv.getContext("2d"),W=cv.width,H=cv.height,a=C.slice(-42);x.clearRect(0,0,W,H);if(!a.length)return;let hi=Math.max(...a.map(z=>z.h)),lo=Math.min(...a.map(z=>z.l)),sc=v=>H-15-(v-lo)/(hi-lo||1)*(H-30);x.strokeStyle="#493728";for(let i=1;i<5;i++){let y=i*H/5;x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke()}let w=W/a.length*.62;a.forEach((z,i)=>{let xx=(i+.5)*W/a.length,yo=sc(z.o),yc=sc(z.c);x.strokeStyle=z.c>=z.o?"#61b878":"#d56859";x.fillStyle=x.strokeStyle;x.beginPath();x.moveTo(xx,sc(z.h));x.lineTo(xx,sc(z.l));x.stroke();x.fillRect(xx-w/2,Math.min(yo,yc),w,Math.max(2,Math.abs(yc-yo)))})}
+function draw(){let cv=$("cv"),x=cv.getContext("2d"),W=cv.width,H=cv.height,a=C.slice(-42);x.clearRect(0,0,W,H);if(!a.length){x.fillStyle="#b9a58b";x.fillText("Data candle belum tersedia",20,30);return}let hi=Math.max(...a.map(z=>z.h)),lo=Math.min(...a.map(z=>z.l)),sc=v=>H-15-(v-lo)/(hi-lo||1)*(H-30);x.strokeStyle="#493728";for(let i=1;i<5;i++){let y=i*H/5;x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke()}let w=W/a.length*.62;a.forEach((z,i)=>{let xx=(i+.5)*W/a.length,yo=sc(z.o),yc=sc(z.c);x.strokeStyle=z.c>=z.o?"#61b878":"#d56859";x.fillStyle=x.strokeStyle;x.beginPath();x.moveTo(xx,sc(z.h));x.lineTo(xx,sc(z.l));x.stroke();x.fillRect(xx-w/2,Math.min(yo,yc),w,Math.max(2,Math.abs(yc-yo)))})}
+function clearPlan(){for(let id of ["sl","tp1","tp2","trail","lot"])$(id).textContent="—"}
 function journal(){let a=JSON.parse(localStorage.getItem("xau1251")||"[]");$("journal").innerHTML=a.length?a.slice().reverse().map(t=>`<div class="trade"><b>${t.side}</b> • ${t.time}<br>Entry ${t.e} | SL ${t.s} | TP1 ${t.t}<br>Risk ${t.r}% • Lot ${t.l}</div>`).join(""):"Belum ada paper trade."}
 function alertSig(s){if(s===last)return;if(last!=="WAIT"&&s!=="WAIT"){if("Notification"in window&&Notification.permission==="granted")new Notification("XAU AI Trader",{body:"Sinyal berubah: "+s});if(audio){let o=audio.createOscillator(),g=audio.createGain();o.frequency.value=720;g.gain.setValueAtTime(.001,audio.currentTime);g.gain.exponentialRampToValueAtTime(.1,audio.currentTime+.03);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.3);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+.3)}}last=s}
-function calc(){if(C.length<20){$("sig").textContent="WAIT";$("filter").textContent="FILTER WAIT";$("reason").textContent="Butuh minimal 20 candle M15";return;}let cl=C.map(z=>z.c),p=cl.at(-1),e20=ema(cl,20),e50=ema(cl,50),rr=rsi(cl),aa=atr(C),ax=adx(C),H=agg(C,60),hc=H.map(z=>z.c),he20=ema(hc,20),he50=ema(hc,50),ht=he20&&he50?(he20>he50?"BULLISH":"BEARISH"):"—",score=(e20&&e50?(e20>e50?2:-2):0)+(rr!=null?(rr>55?2:rr<45?-2:0):0)+(ax!=null&&ax>18?(e20>e50?1:-1):0),raw=score>=3?"BUY":score<=-3?"SELL":"WAIT",ok=(raw==="BUY"&&ht==="BULLISH")||(raw==="SELL"&&ht==="BEARISH"),sig=ok?raw:"WAIT";$("sig").textContent=sig;$("score").textContent="Score "+score;$("mtrend").textContent=e20>e50?"BULLISH":e20<e50?"BEARISH":"FLAT";$("htrend").textContent=ht;$("rsi").textContent=f(rr);$("adx").textContent=f(ax);$("atr").textContent=f(aa);$("filter").textContent=ok?"FILTER PASS":"FILTER WAIT";$("reason").textContent=raw!=="WAIT"&&!ok?"H1 tidak searah":"M15 + H1 searah";let sl=aa?aa*1.5:null,stop=sig==="BUY"?p-sl:sig==="SELL"?p+sl:null,t1=sig==="BUY"?p+sl:sig==="SELL"?p-sl:null,t2=sig==="BUY"?p+aa*2.5:sig==="SELL"?p-aa*2.5:null,tr=sig==="BUY"?p-aa:sig==="SELL"?p+aa:null;$("entry").textContent=f(p);$("sl").textContent=f(stop);$("tp1").textContent=f(t1);$("tp2").textContent=f(t2);$("trail").textContent=f(tr);let lot=stop?(+$("bal").value||0)*(+$("risk").value||1)/100/(Math.abs(p-stop)*100):null;$("lot").textContent=f(lot);if(prev!=null)$("delta").textContent=(p-prev>=0?"+":"")+f(p-prev);prev=p;alertSig(sig);draw()}
-async function load(){st("CONNECTING");try{let q=Date.now(),s=await get("https://xaus.com/api/v1/spot?compact=1&fresh="+q),i=await get("https://xaus.com/api/v1/intraday?symbol=xau&hours=168&fresh="+q);$("price").textContent=f(+s.spot_usd_oz);let age=+(s.data_state?.age_seconds||0);st(s.data_state?.status==="fresh"&&age<180?"LIVE":"STALE");$("updated").textContent="XAUS • "+(s.price_as_of||s.updated_at||"")+" • age "+Math.round(age)+"s";C=agg(i.points||[],15);$("bars").textContent=C.length+" candle M15";$("status").textContent="Data referensi XAUS, bukan harga broker Finex. Data yang tersedia: "+(i.count||i.points?.length||0)+" titik pada interval "+(i.interval_seconds||"?")+" detik; jika kurang dari 50 candle, EMA50/H1 bisa belum tersedia. Cocokkan dengan MT5 Finex.";calc()}catch(e){st("OFFLINE");$("status").textContent="Data gagal: "+e.message}}
+function calc(){
+ const cl=C.map(z=>z.c),hc=H1.map(z=>z.c),p=C.length?C[C.length-1].c:null;
+ const e20=ema(cl,20),e50=ema(cl,50),rr=rsi(cl),aa=atr(C),ax=adx(C),he20=ema(hc,20),he50=ema(hc,50);
+ const enoughM15=C.length>=50,enoughH1=H1.length>=50;
+ const mt=enoughM15?(e20>e50?"BULLISH":e20<e50?"BEARISH":"FLAT"):"DATA KURANG";
+ const ht=enoughH1?(he20>he50?"BULLISH":he20<he50?"BEARISH":"FLAT"):"DATA KURANG";
+ $("mtrend").textContent=mt;$("htrend").textContent=ht;$("rsi").textContent=f(rr);$("adx").textContent=f(ax);$("atr").textContent=f(aa);$("bars").textContent=`${C.length} candle M15 • H1 ${H1.length}`;
+ let score=0,raw="WAIT",sig="WAIT",reason="Data belum cukup untuk konfirmasi EMA50 M15 dan H1.";
+ if(enoughM15&&enoughH1&&p!=null){score=(e20>e50?2:-2)+(rr!=null?(rr>55?2:rr<45?-2:0):0)+(ax!=null&&ax>18?(e20>e50?1:-1):0);raw=score>=3?"BUY":score<=-3?"SELL":"WAIT";let same=(raw==="BUY"&&ht==="BULLISH")||(raw==="SELL"&&ht==="BEARISH");if(!spotFresh||!barsFresh){reason="WAIT: data harga/candle stale; tunggu feed segar."}else if(!same&&raw!=="WAIT"){reason="WAIT: tren H1 tidak searah M15."}else if(raw==="WAIT"){reason="Syarat sinyal M15 belum terpenuhi."}else{sig=raw;reason="M15 + H1 searah; tetap periksa spread Finex."}}
+ $("sig").textContent=sig;$("score").textContent="Score "+(enoughM15&&enoughH1?score:"—");$("filter").textContent=sig==="WAIT"?"FILTER WAIT":"FILTER PASS";$("reason").textContent=reason;$("entry").textContent=f(p);
+ if(sig!=="WAIT"&&aa!=null&&p!=null){let slDist=aa*1.5,stop=sig==="BUY"?p-slDist:p+slDist,t1=sig==="BUY"?p+slDist:p-slDist,t2=sig==="BUY"?p+aa*2.5:p-aa*2.5,tr=sig==="BUY"?p-aa:p+aa;$("sl").textContent=f(stop);$("tp1").textContent=f(t1);$("tp2").textContent=f(t2);$("trail").textContent=f(tr);let lot=((+$("bal").value||0)*(+$("risk").value||0))/100/(Math.abs(p-stop)*100);$("lot").textContent=f(lot)}else clearPlan();
+ if(prev!=null&&p!=null)$("delta").textContent=(p-prev>=0?"+":"")+f(p-prev);if(p!=null)prev=p;alertSig(sig);draw();
+}
+async function load(){st("CONNECTING");try{
+ const q=Date.now();
+ const [s,m15,h1]=await Promise.all([
+  get("https://xaus.com/api/v1/spot?compact=1&fresh="+q),
+  get("https://xaus.com/api/v1/chart?symbol=xau&range=5d&interval=15m&fresh="+q),
+  get("https://xaus.com/api/v1/chart?symbol=xau&range=5d&interval=1h&fresh="+q)
+ ]);
+ const spot=Number(s.spot_usd_oz);$("price").textContent=f(spot);let age=Number(s.data_state?.age_seconds??Infinity);spotFresh=s.data_state?.status==="fresh"&&age<=180;
+ $("updated").textContent="XAUS • "+(s.price_as_of||s.updated_at||"waktu tidak tersedia")+" • age "+(Number.isFinite(age)?Math.round(age)+"s":"?");
+ C=normalizeBars(m15.points||m15.data||[]);H1=normalizeBars(h1.points||h1.data||[]);
+ const now=Date.now(),m15Age=C.length?now-C[C.length-1].t:Infinity,h1Age=H1.length?now-H1[H1.length-1].t:Infinity;
+ barsFresh=C.length>0&&H1.length>0&&m15Age<=90*60*1000&&h1Age<=4*60*60*1000;
+ if(m15.data_state?.status==="stale"||h1.data_state?.status==="stale")barsFresh=false;
+ st(spotFresh&&barsFresh?"LIVE":"STALE");
+ $("status").textContent=`Harga referensi XAUS, bukan harga broker Finex. Sumber candle: endpoint chart XAUS. M15 ${C.length} candle; H1 ${H1.length} candle. Status spot: ${s.data_state?.status||"tidak tersedia"}, umur ${Number.isFinite(age)?Math.round(age)+" detik":"tidak diketahui"}. ${(!C.length||!H1.length)?"Data chart belum tersedia.":(!barsFresh?"Candle lama atau sumber tidak segar; sinyal dinonaktifkan.":"Tetap cocokkan harga dan spread dengan MT5 Finex.")}`;
+ calc();
+ }catch(e){st("OFFLINE");spotFresh=false;barsFresh=false;$("status").textContent="Gagal mengambil data chart/spot: "+e.message+". Sinyal dan rencana transaksi dinonaktifkan sampai data tersedia.";$("sig").textContent="WAIT";$("filter").textContent="FILTER WAIT";$("reason").textContent="Feed gagal dimuat.";clearPlan();draw()}}
 $("ref").onclick=load;$("bal").oninput=calc;$("risk").oninput=calc;$("spr").oninput=calc;
 $("mt5").onclick=()=>open("https://finex.co.id/trading/platform-web-mt5","_blank");
 $("notif").onclick=async()=>{if("Notification"in window){let p=await Notification.requestPermission();if(p==="granted"){$("notif").textContent="🔔 Aktif";audio=audio||new AudioContext();await audio.resume()}}};
-$("paper").onclick=()=>{if($("sig").textContent==="WAIT")return alert("Sinyal belum lolos filter M15 + H1.");let a=JSON.parse(localStorage.getItem("xau1251")||"[]");a.push({time:new Date().toLocaleString("id-ID"),side:$("sig").textContent,e:$("entry").textContent,s:$("sl").textContent,t:$("tp1").textContent,r:$("risk").value,l:$("lot").textContent});localStorage.setItem("xau1251",JSON.stringify(a.slice(-30)));journal()};
-$("clear").onclick=()=>{localStorage.removeItem("xau1251");journal()};
-journal();load();setInterval(load,30000);
+$("paper").onclick=()=>{if($("sig").textContent==="WAIT")return alert("Sinyal belum lolos filter data segar + konfirmasi M15/H1. Paper Trade tidak dibuat.");let a=JSON.parse(localStorage.getItem("xau1251")||"[]");a.push({time:new Date().toLocaleString("id-ID"),side:$("sig").textContent,e:$("entry").textContent,s:$("sl").textContent,t:$("tp1").textContent,r:$("risk").value,l:$("lot").textContent});localStorage.setItem("xau1251",JSON.stringify(a.slice(-30)));journal()};
+$("clear").onclick=()=>{localStorage.removeItem("xau1251");journal()};journal();load();setInterval(load,60000);
 </script>
 </body></html>
