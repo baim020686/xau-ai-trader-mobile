@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#120e0a">
+<title>XAU AI Trader V12.5.4</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#120e0a;color:#f8ead8;font-family:system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;padding:14px 16px;background:#1c130cee;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #3c2a19}
+header b{font-size:18px}header small{display:block;color:#b9a58b}.pill{padding:7px 10px;border-radius:20px;font-size:10px;background:#765722}.live{background:#28613a}.stale{background:#80601d}.off{background:#71332d}
+main{max-width:650px;margin:auto;padding:12px}.card,.signal{background:#21170e;border:1px solid #3c2a19;border-radius:17px;padding:14px;margin-bottom:11px}.hero{text-align:center}.label{font-size:10px;letter-spacing:2px;color:#c5ad8e}.price{font-size:40px;font-weight:850}small,span{color:#b9a58b;font-size:11px}.signal{display:flex;justify-content:space-between;gap:10px;align-items:center}.signal strong{display:block;font-size:28px}button{border:0;border-radius:11px;padding:11px;background:#8d642e;color:white;font-weight:700}.card h2{font-size:16px;margin:0 0 10px}canvas{display:block;width:100%;height:auto;background:#160f09;border-radius:10px}.charthead{display:flex;justify-content:space-between}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid .card{margin:0}.grid strong{display:block;font-size:20px;margin:5px 0}.levels{display:grid;grid-template-columns:1fr 1fr;gap:8px}.levels div{background:#170f09;border-radius:10px;padding:10px}.levels b{display:block;font-size:15px;margin-top:4px}.inputs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.inputs label{font-size:11px;color:#b9a58b}.inputs input{width:100%;padding:9px;margin-top:4px;border-radius:9px;border:1px solid #49321e;background:#130d08;color:white}.actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:11px}.actions button:nth-child(2){background:#52738f}.actions button:nth-child(3){background:#4c805c}.trade{background:#170f09;border-radius:10px;padding:9px;margin:6px 0;font-size:11px}.clear{background:#69352e}p{font-size:12px;line-height:1.5;color:#d0bea6}.notice{border-left:3px solid #8d642e;padding-left:10px}@media(max-width:450px){.actions{grid-template-columns:1fr}.price{font-size:34px}}
+</style>
+</head>
+<body>
+<header><div><b>🥇 XAU AI Trader</b><small>V12.5.4 • Sinyal sederhana • Simulasi</small></div><div id="state" class="pill">CONNECTING</div></header>
+<main>
+<section class="card hero"><div class="label">XAU/USD REFERENCE</div><div id="price" class="price">—</div><div id="delta">Perubahan: —</div><small id="updated">Mengambil data...</small></section>
+<section class="signal"><div><span>SIGNAL</span><strong id="sig">WAIT</strong><small id="score">Menunggu data</small></div><div><b id="filter">FILTER WAIT</b><small id="reason">Mengambil data</small></div></section>
+<section class="card"><div class="charthead"><h2>Chart M15</h2><span id="bars">—</span></div><canvas id="cv" width="700" height="300"></canvas></section>
+<section class="grid">
+<div class="card"><span>EMA 9</span><strong id="ema9">—</strong><small>arah cepat</small></div>
+<div class="card"><span>EMA 21</span><strong id="ema21">—</strong><small>arah tren</small></div>
+<div class="card"><span>ATR</span><strong id="atr">—</strong><small>jarak SL/TP</small></div>
+<div class="card"><span>Tren M15</span><strong id="trend">—</strong><small>tanpa konfirmasi H1</small></div>
+</section>
+<section class="card"><h2>Trade Plan (simulasi)</h2><div class="levels">
+<div><span>Entry</span><b id="entry">—</b></div><div><span>Stop Loss</span><b id="sl">—</b></div>
+<div><span>Take Profit 1</span><b id="tp1">—</b></div><div><span>Take Profit 2</span><b id="tp2">—</b></div>
+</div></section>
+<section class="card"><h2>Risk (estimasi)</h2><div class="inputs">
+<label>Modal USD<input id="bal" type="number" value="1000" min="0"></label>
+<label>Risk % per trade<input id="risk" type="number" value="0.5" step="0.1" min="0.1" max="2"></label>
+</div><div style="padding:10px 0">Estimasi lot kasar: <b id="lot">—</b></div><small>Lot ini belum tervalidasi dengan contract size/tick value Finex. Jangan gunakan untuk order real.</small></section>
+<section class="actions"><button id="ref">↻ Refresh</button><button id="mt5">Buka MT5 Finex</button><button id="paper">＋ Catat Paper Trade</button></section>
+<section class="card"><h2>Jurnal Paper Trade</h2><div id="journal"></div><button class="clear" id="clear">Hapus Jurnal</button></section>
+<section class="card"><h2>Status</h2><p id="status">Simulasi saja. Tidak mengirim order ke broker.</p><p class="notice">Strategi ringkas: EMA 9/21 + arah candle + ATR untuk SL/TP. Sinyal bisa lebih sering muncul, tetapi tidak menjamin profit. Uji demo dan catat hasilnya sebelum mengambil keputusan.</p></section>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);let C=[],prev=null,busy=false;
+async function get(u){const r=await fetch(u,{cache:"no-store"});if(!r.ok)throw Error("HTTP "+r.status);return r.json()}
+function ema(a,n){if(a.length<n)return null;let k=2/(n+1),e=a.slice(0,n).reduce((x,y)=>x+y,0)/n;for(let i=n;i<a.length;i++)e=a[i]*k+e*(1-k);return e}
+function atr(c,n=14){if(c.length<n+1)return null;let t=[];for(let i=1;i<c.length;i++){const x=c[i],p=c[i-1];t.push(Math.max(x.h-x.l,Math.abs(x.h-p.c),Math.abs(x.l-p.c)))}return t.slice(-n).reduce((a,b)=>a+b,0)/n}
+function ms(v){if(typeof v==="number")return v<1e12?v*1000:v;const n=Number(v);if(Number.isFinite(n)&&String(v).trim()!=="")return n<1e12?n*1000:n;return Date.parse(v)}
+function agg(p,mins){const m=new Map(),d=mins*60000;for(const q of p){const tm=ms(q.t),v=Number(q.p);if(!Number.isFinite(tm)||!Number.isFinite(v))continue;const t=Math.floor(tm/d)*d;if(!m.has(t))m.set(t,{t,o:v,h:v,l:v,c:v});else{const z=m.get(t);z.h=Math.max(z.h,v);z.l=Math.min(z.l,v);z.c=v}}return [...m.values()].sort((a,b)=>a.t-b.t)}
+function f(v){return v==null||!Number.isFinite(Number(v))?"—":Number(v).toFixed(2)}
+function state(s){$("state").textContent=s;$("state").className="pill "+(s==="LIVE"?"live":s==="STALE"?"stale":"off")}
+function draw(){const cv=$("cv"),x=cv.getContext("2d"),W=cv.width,H=cv.height,a=C.slice(-42);x.clearRect(0,0,W,H);if(!a.length)return;const hi=Math.max(...a.map(z=>z.h)),lo=Math.min(...a.map(z=>z.l)),sc=v=>H-14-(v-lo)/(hi-lo||1)*(H-28);x.strokeStyle="#493728";for(let i=1;i<5;i++){const y=i*H/5;x.beginPath();x.moveTo(0,y);x.lineTo(W,y);x.stroke()}const w=W/a.length*.62;a.forEach((z,i)=>{const xx=(i+.5)*W/a.length,yo=sc(z.o),yc=sc(z.c);x.strokeStyle=z.c>=z.o?"#61b878":"#d56859";x.fillStyle=x.strokeStyle;x.beginPath();x.moveTo(xx,sc(z.h));x.lineTo(xx,sc(z.l));x.stroke();x.fillRect(xx-w/2,Math.min(yo,yc),w,Math.max(2,Math.abs(yc-yo)))})}
+function journalData(){try{return JSON.parse(localStorage.getItem("xau1254")||"[]")}catch(e){return []}}
+function journal(){const a=journalData();$("journal").innerHTML=a.length?a.slice().reverse().map(t=>`<div class="trade"><b>${t.side}</b> • ${t.time}<br>Entry ${t.e} | SL ${t.s} | TP1 ${t.t}<br>Risk ${t.r}% • Lot ${t.l}</div>`).join(""):"Belum ada paper trade."}
+function resetPlan(){for(const id of ["sl","tp1","tp2","lot"])$(id).textContent="—"}
+function calc(){if(!C.length){$("sig").textContent="WAIT";$("filter").textContent="FILTER WAIT";$("reason").textContent="Data candle belum tersedia";resetPlan();return}
+ const cl=C.map(z=>z.c),p=cl[cl.length-1],e9=ema(cl,9),e21=ema(cl,21),a=atr(C);$("entry").textContent=f(p);$("ema9").textContent=f(e9);$("ema21").textContent=f(e21);$("atr").textContent=f(a);
+ if(prev!==null)$("delta").textContent="Perubahan: "+(p-prev>=0?"+":"")+f(p-prev);prev=p;
+ if(e9===null||e21===null||a===null){$("sig").textContent="WAIT";$("score").textContent="Data belum cukup";$("filter").textContent="FILTER WAIT";$("reason").textContent="Butuh minimal 21 candle M15";$("trend").textContent="DATA KURANG";resetPlan();draw();return}
+ const z=C[C.length-1],bull=e9>e21&&p>e9&&z.c>=z.o,bear=e9<e21&&p<e9&&z.c<=z.o;
+ const sig=bull?"BUY":bear?"SELL":"WAIT";$("sig").textContent=sig;$("score").textContent=sig==="WAIT"?"Belum ada arah kuat":"Sinyal sederhana EMA 9/21";$("filter").textContent=sig==="WAIT"?"FILTER WAIT":"FILTER PASS";$("reason").textContent=sig==="BUY"?"Tren naik + candle bullish":sig==="SELL"?"Tren turun + candle bearish":"Menunggu arah EMA dan candle";$("trend").textContent=e9>e21?"BULLISH":e9<e21?"BEARISH":"FLAT";
+ if(sig==="WAIT"){resetPlan()}else{const d=a*1.5,sl=sig==="BUY"?p-d:p+d,tp1=sig==="BUY"?p+d:p-d,tp2=sig==="BUY"?p+a*2.5:p-a*2.5;$("sl").textContent=f(sl);$("tp1").textContent=f(tp1);$("tp2").textContent=f(tp2);const bal=Math.max(0,Number($("bal").value)||0),risk=Math.min(2,Math.max(0,Number($("risk").value)||0));$("lot").textContent=f(bal*risk/100/(d*100))}
+ draw()}
+async function load(){if(busy)return;busy=true;state("CONNECTING");try{const q=Date.now(),s=await get("https://xaus.com/api/v1/spot?compact=1&fresh="+q),i=await get("https://xaus.com/api/v1/intraday?symbol=xau&hours=720&fresh="+q),p=Number(s.spot_usd_oz);if(!Number.isFinite(p))throw Error("Format harga tidak dikenal");$("price").textContent=f(p);const age=Number(s.data_state?.age_seconds??999999);state(s.data_state?.status==="fresh"&&age<180?"LIVE":"STALE");$("updated").textContent="XAUS • "+(s.price_as_of||s.updated_at||"waktu tidak tersedia")+" • usia "+Math.round(age)+" detik";C=agg(i.points||[],15);$("bars").textContent=C.length+" candle M15";$("status").textContent="Harga referensi XAUS, bukan harga Finex. Titik data: "+(i.count||i.points?.length||0)+"; candle M15 terbentuk: "+C.length+". EMA 9/21 dan ATR dihitung dari candle yang tersedia. Simulasi saja, tidak mengirim order.";calc()}catch(e){state("OFFLINE");$("status").textContent="Gagal mengambil data: "+e.message;C=[];calc()}finally{busy=false}}
+$("ref").onclick=load;["bal","risk"].forEach(id=>$(id).addEventListener("input",calc));$("mt5").onclick=()=>window.open("https://finex.co.id/trading/platform-web-mt5","_blank","noopener");
+$("paper").onclick=()=>{const side=$("sig").textContent;if(side==="WAIT"){alert("Sinyal masih WAIT; belum ada trade yang dicatat.");return}const a=journalData();a.push({time:new Date().toLocaleString("id-ID"),side,e:$("entry").textContent,s:$("sl").textContent,t:$("tp1").textContent,r:$("risk").value,l:$("lot").textContent});localStorage.setItem("xau1254",JSON.stringify(a.slice(-30)));journal()};
+$("clear").onclick=()=>{if(confirm("Hapus semua jurnal?")){localStorage.removeItem("xau1254");journal()}};journal();load();setInterval(load,30000);
+</script>
+</body></html>
