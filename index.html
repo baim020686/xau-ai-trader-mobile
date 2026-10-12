@@ -45,4 +45,4 @@ $("ref").onclick=load;["bal","risk","spr"].forEach(id=>$(id).addEventListener("i
 $("paper").onclick=()=>{let side=$("sig").textContent;if(side==="WAIT"){alert("Sinyal masih WAIT. Tidak ada transaksi simulasi dicatat.");return}let a=journalData();a.push({time:new Date().toLocaleString("id-ID"),side,e:$("entry").textContent,s:$("sl").textContent,t:$("tp1").textContent,r:$("risk").value,l:$("lot").textContent});localStorage.setItem("xau1252",JSON.stringify(a.slice(-30)));journal()};$("clear").onclick=()=>{if(confirm("Hapus semua jurnal paper trade?")){localStorage.removeItem("xau1252");journal()}};journal();load();setInterval(load,30000);
 </script>
 </body>
-</html>
+  </html>
