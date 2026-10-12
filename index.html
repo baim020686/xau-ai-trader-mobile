@@ -58,12 +58,7 @@ $("clear").onclick=()=>{localStorage.removeItem("xau1251");journal()};
 journal();load();setInterval(load,30000);
 </script>
 </body></html>
-<html lang="id">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#120e0a">
-<title>XAU AI Trader V12.5.1</title>
+AI Trader V12.5.1</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#120e0a;color:#f8ead8;font-family:system-ui,-apple-system,Segoe UI,sans-serif}header{position:sticky;top:0;z-index:9;padding:14px 16px;background:#1c130cdd;backdrop-filter:blur(8px);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #3c2a19}header b{font-size:18px}header small{display:block;color:#b9a58b}.pill{padding:7px 10px;border-radius:20px;font-size:10px;background:#765722}.live{background:#28613a}.stale{background:#80601d}.off{background:#71332d}main{max-width:650px;margin:auto;padding:12px}.card,.signal{background:#21170e;border:1px solid #3c2a19;border-radius:17px;padding:14px;margin-bottom:11px;box-shadow:0 8px 25px #0004}.hero{text-align:center}.label{font-size:10px;letter-spacing:2px;color:#c5ad8e}.price{font-size:42px;font-weight:850}.muted,small,span{color:#b9a58b;font-size:11px}.signal{display:flex;justify-content:space-between;gap:12px;align-items:center}.signal strong{display:block;font-size:29px}.signal button,.actions button,.clear{border:0;border-radius:11px;padding:11px;background:#8d642e;color:white;font-weight:700}.charthead{display:flex;justify-content:space-between}.card h2{font-size:16px;margin:0 0 10px}canvas{width:100%;height:auto;background:#160f09;border-radius:10px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid .card{margin:0}.grid strong{display:block;font-size:20px;margin:5px 0}.levels{display:grid;grid-template-columns:1fr 1fr;gap:8px}.levels div{background:#170f09;border-radius:10px;padding:10px}.levels b{display:block;font-size:15px;margin-top:4px}.inputs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.inputs label{font-size:11px;color:#b9a58b}.inputs input{width:100%;padding:9px;margin-top:4px;border-radius:9px;border:1px solid #49321e;background:#130d08;color:white}.actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:11px}.actions button:nth-child(2){background:#52738f}.actions button:nth-child(3){background:#4c805c}.trade{background:#170f09;border-radius:10px;padding:9px;margin:6px 0;font-size:11px}.clear{background:#69352e}p{font-size:12px;line-height:1.5;color:#d0bea6}@media(max-width:450px){.inputs{grid-template-columns:1fr 1fr}.inputs label:last-child{grid-column:1/-1}.actions{grid-template-columns:1fr}.price{font-size:36px}}
 </style>
@@ -112,8 +107,4 @@ async function load(){st("CONNECTING");try{let q=Date.now(),s=await get("https:/
 $("ref").onclick=load;$("bal").oninput=calc;$("risk").oninput=calc;$("spr").oninput=calc;
 $("mt5").onclick=()=>open("https://finex.co.id/trading/platform-web-mt5","_blank");
 $("notif").onclick=async()=>{if("Notification"in window){let p=await Notification.requestPermission();if(p==="granted"){$("notif").textContent="🔔 Aktif";audio=audio||new AudioContext();await audio.resume()}}};
-$("paper").onclick=()=>{if($("sig").textContent==="WAIT")return alert("Sinyal belum lolos filter M15 + H1.");let a=JSON.parse(localStorage.getItem("xau1251")||"[]");a.push({time:new Date().toLocaleString("id-ID"),side:$("sig").textContent,e:$("entry").textContent,s:$("sl").textContent,t:$("tp1").textContent,r:$("risk").value,l:$("lot").textContent});localStorage.setItem("xau1251",JSON.stringify(a.slice(-30)));journal()};
-$("clear").onclick=()=>{localStorage.removeItem("xau1251");journal()};
-journal();load();setInterval(load,30000);
-</script>
-</body></html>
+$("paper").onclick=()=>{if($("sig").textContent==="WAIT")return alert("Sinyal belum lolos filter M15 + H1.");let a=JSON.parse(localStorage.getItem("xau1251")||"[]");a.push({time:new Date().to
